@@ -17,7 +17,7 @@ headerAscii[#headerAscii + 1] = emmptyLine
 
 api.nvim_create_autocmd("BufWinLeave", {
   callback = function()
-    if vim.bo.ft == "NvDash" then
+    if vim.bo.ft == "nvdash" then
       vim.g.nvdash_displayed = false
     end
   end,
@@ -26,14 +26,14 @@ api.nvim_create_autocmd("BufWinLeave", {
 local max_height = #headerAscii + 4 + (2 * #config.buttons) -- 4  = extra spaces i.e top/bottom
 local get_win_height = api.nvim_win_get_height
 
-M.open = function(buf)
+M.open = function(buf, win)
   if vim.fn.expand "%" == "" or buf then
-    buf = buf or api.nvim_create_buf(false, true)
-    api.nvim_win_set_buf(api.nvim_get_current_win(), buf)
-
-    if get_win_height(0) < max_height then
+    if get_win_height(win) < max_height then
       return
     end
+
+    buf = buf or api.nvim_create_buf(false, true)
+    api.nvim_win_set_buf(win, buf)
 
     vim.g.nvdash_displayed = true
 
@@ -47,7 +47,7 @@ M.open = function(buf)
     end
 
     local function addPadding_toHeader(str)
-      local pad = (api.nvim_win_get_width(0) - fn.strwidth(str)) / 2
+      local pad = (api.nvim_win_get_width(win) - fn.strwidth(str)) / 2
       return string.rep(" ", math.floor(pad)) .. str .. " "
     end
 
@@ -65,12 +65,12 @@ M.open = function(buf)
     local result = {}
 
     -- make all lines available
-    for i = 1, get_win_height(0) do
+    for i = 1, get_win_height(win) do
       result[i] = ""
     end
 
-    local headerStart_Index = math.floor((get_win_height(0) / 2) - (#dashboard / 2))
-    local abc = math.floor((get_win_height(0) / 2) - (#dashboard / 2))
+    local headerStart_Index = math.floor((get_win_height(win) / 2) - (#dashboard / 2))
+    local abc = math.floor((get_win_height(win) / 2) - (#dashboard / 2))
 
     -- set ascii
     for _, val in ipairs(dashboard) do
@@ -81,7 +81,7 @@ M.open = function(buf)
     api.nvim_buf_set_lines(buf, 0, -1, false, result)
 
     local nvdash = api.nvim_create_namespace "nvdash"
-    local horiz_pad_index = math.floor((api.nvim_win_get_width(0) / 2) - (36 / 2)) - 2
+    local horiz_pad_index = math.floor((api.nvim_win_get_width(win) / 2) - (36 / 2)) - 2
 
     for i = abc, abc + #header - 2 do
       api.nvim_buf_add_highlight(buf, nvdash, "NvDashAscii", i, horiz_pad_index, -1)
@@ -91,7 +91,7 @@ M.open = function(buf)
       api.nvim_buf_add_highlight(buf, nvdash, "NvDashButtons", i, horiz_pad_index, -1)
     end
 
-    api.nvim_win_set_cursor(0, { abc + #header, math.floor(vim.o.columns / 2) - 13 })
+    api.nvim_win_set_cursor(win, { abc + #header, math.floor(vim.o.columns / 2) - 13 })
 
     local first_btn_line = abc + #header + 2
     local keybind_lineNrs = {}
@@ -131,29 +131,68 @@ M.open = function(buf)
       end
     end, { buffer = true })
 
-    api.nvim_set_current_buf(buf)
+    -- dont go to nvdash buffer if its already displayed in window
+    if not vim.g.nvdash_displayed then
+      api.nvim_set_current_buf(buf)
+    end
 
     -- buf only options
-    vim.opt_local.buflisted = false
+    vim.opt_local.bufhidden = "wipe"
     vim.opt_local.modifiable = false
-    vim.opt_local.buftype = "nofile"
-    vim.opt_local.filetype = "NvDash"
+    vim.opt_local.filetype = "nvdash"
+    vim.opt_local.buflisted = true
+    vim.opt_local.wrap = false
+    vim.opt_local.foldlevel = 999
+    vim.opt_local.foldcolumn = "0"
+    vim.opt_local.cursorcolumn = false
+    vim.opt_local.cursorline = false
     vim.opt_local.number = false
-    vim.opt_local.list = false
     vim.opt_local.relativenumber = false
+    vim.opt_local.list = false
+    vim.opt_local.spell = false
   end
 end
+
+local win = api.nvim_get_current_win()
 
 -- redraw dashboard on VimResized event
 vim.api.nvim_create_autocmd("VimResized", {
   callback = function()
-    if vim.bo.filetype == "NvDash" then
-      vim.opt_local.modifiable = true
-      api.nvim_buf_set_lines(0, 0, -1, false, { "" })
-
-      require("nvchad_ui.nvdash").open()
+    if vim.bo.filetype == "nvdash" then
+      require("nvchad_ui.nvdash").open(false, win)
     end
   end,
 })
+
+-- testing!
+local new_cmd = vim.api.nvim_create_user_command
+
+local function redraw()
+  for _, winnr in ipairs(vim.api.nvim_list_wins()) do
+    local bufnr = (vim.api.nvim_win_get_buf(winnr))
+
+    if vim.bo[bufnr].ft == "nvdash" then
+      vim.bo[bufnr].modifiable = true
+      vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "" })
+
+      require("nvchad_ui.nvdash").open(bufnr, winnr)
+
+      break
+    end
+  end
+end
+
+new_cmd("Redraw", function()
+  redraw()
+end, {})
+
+
+
+-- resize nvdash whenever opening & closing buffers
+-- vim.api.nvim_create_autocmd({ "WinNew", "WinClosed", "BufLeave", "WinEnter" }, {
+--   callback = function()
+--     redraw()
+--   end,
+-- })
 
 return M
