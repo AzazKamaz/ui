@@ -176,7 +176,7 @@ local function redraw()
       vim.api.nvim_buf_set_lines(bufnr, 0, -1, false, { "" })
 
       require("nvchad_ui.nvdash").open(bufnr, winnr)
-
+      vim.notify "nvdash redrawed"
       break
     end
   end
@@ -186,13 +186,11 @@ new_cmd("Redraw", function()
   redraw()
 end, {})
 
-
-
--- resize nvdash whenever opening & closing buffers
--- vim.api.nvim_create_autocmd({ "WinNew", "WinClosed", "BufLeave", "WinEnter" }, {
---   callback = function()
---     redraw()
---   end,
--- })
+-- resize nvdash whenever opening & closing buffers { "WinClosed", "BufLeave", "WinEnter" }
+vim.api.nvim_create_autocmd({ "WinNew" }, {
+  callback = function()
+    redraw()
+  end,
+})
 
 return M
